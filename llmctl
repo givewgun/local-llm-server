@@ -170,12 +170,12 @@ cmd_tunnel() {
       fi
       local id
       id="$(cloudflared_cli tunnel list --output json --name "$TUNNEL_NAME" \
-            | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+            | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
       if [[ -z "$id" ]]; then
         info "creating tunnel $TUNNEL_NAME"
         cloudflared_cli tunnel create "$TUNNEL_NAME"
         id="$(cloudflared_cli tunnel list --output json --name "$TUNNEL_NAME" \
-              | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)"
+              | grep -o '"id": *"[^"]*"' | head -1 | cut -d'"' -f4)"
       fi
       [[ -f $cfg/$id.json ]] || die "credentials $cfg/$id.json missing — tunnel was created elsewhere. \
 Copy the file here or delete the tunnel: cloudflared tunnel delete $TUNNEL_NAME"
