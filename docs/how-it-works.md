@@ -197,11 +197,11 @@ That is why `llmctl` clears Ollama's VRAM before vLLM starts, and why the fallba
 | vLLM: KV cache (30,064 tokens) | about 4.1 GB |
 | Free for games or Ollama GPU models (measured: 11.4 of 16.3 GB in use) | about 4.5 GB |
 
-If you game on this PC, a heavy game plus vLLM may not fit. Stop vLLM first (`docker compose stop vllm`) and the fallback keeps the API answering.
+If you game on this PC, a heavy game plus vLLM may not fit. Run `llmctl gpu pause` first (frees about 10 GB) and the CPU fallback keeps the API answering; `llmctl gpu resume` when you're done. Don't use Docker Desktop's Pause button: it frees no VRAM and freezes the API.
 
 ## Operating it
 
-One script does everything: on Windows run it from Git Bash in the repo folder as `bash llmctl <command>`.
+One script does everything. On Windows, from the repo folder: PowerShell `.\llmctl.ps1 <command>`, or Git Bash `bash llmctl <command>` (shown below).
 
 | Task | Command |
 | --- | --- |
@@ -214,6 +214,7 @@ One script does everything: on Windows run it from Git Bash in the repo folder a
 | List / switch models | `bash llmctl model list` · `bash llmctl model use <preset>` |
 | Issue a key | `bash llmctl key create <name> --models local-chat --rpm 60` |
 | List / revoke keys | `bash llmctl key list` · `bash llmctl key revoke <name>` |
+| Free / reclaim the GPU | `bash llmctl gpu pause` · `bash llmctl gpu resume` |
 | Back up keys and usage | `bash llmctl backup` |
 
 ### Where to look when something breaks

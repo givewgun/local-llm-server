@@ -33,7 +33,7 @@ git clone https://github.com/givewgun/local-llm-server.git && cd local-llm-serve
 ./llmctl admin expose         # admin UI + Grafana on your tailnet
 ```
 
-On Windows, run these from Git Bash as `bash llmctl …`. Full walkthrough: **[docs/setup.md](docs/setup.md)**.
+On Windows use PowerShell with `.\llmctl.ps1 …` (it finds Git Bash for you), or Git Bash with `bash llmctl …`. Plain `bash` in PowerShell is WSL's launcher and won't work. Full walkthrough: **[docs/setup.md](docs/setup.md)**.
 
 ## Calling it
 

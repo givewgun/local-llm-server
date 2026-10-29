@@ -92,6 +92,7 @@ cmd_up() {
   if has_profile tunnel && [[ ! -f config/cloudflared/config.yml ]]; then
     die "tunnel profile enabled but not configured — run: ./llmctl tunnel setup"
   fi
+  unpause_all
   # Gateway first: the helpers below run inside it.
   dc up -d postgres litellm
   admin wait 300
@@ -203,6 +204,45 @@ Copy the file here or delete the tunnel: cloudflared tunnel delete $TUNNEL_NAME"
   esac
 }
 
+unpause_all() { # Docker Desktop's Pause freezes containers without freeing VRAM; undo it
+  if [[ -n "$(dc ps -q --status paused)" ]]; then
+    warn "containers were paused (Docker Desktop Pause button?) — unpausing"
+    dc unpause >/dev/null
+  fi
+}
+
+vram() { # one-line VRAM summary, if nvidia-smi is on the host
+  command -v nvidia-smi >/dev/null || return 0
+  nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits \
+    | awk -F', ' '{printf "  VRAM: %.1f / %.1f GB used\n", $1/1024, $2/1024}'
+}
+
+cmd_gpu() {
+  load_env
+  unpause_all
+  case "${1:-status}" in
+    pause)
+      # Free the GPU (e.g. for gaming). The API stays up on the CPU fallback model.
+      dc stop vllm
+      admin ollama-unload
+      info "vLLM stopped; local-chat now answered by local-chat-small (CPU)"
+      vram ;;
+    resume)
+      # Close GPU-heavy apps first: vLLM sizes its KV cache from VRAM free at startup.
+      admin ollama-unload
+      dc up -d vllm
+      wait_healthy vllm 1800
+      vram ;;
+    status)
+      local state
+      state="$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+               "$(dc ps -aq vllm)" 2>/dev/null || echo "not created")"
+      echo "  vLLM: $state"
+      vram ;;
+    *) die "usage: gpu [pause|resume|status]" ;;
+  esac
+}
+
 cmd_admin() {
   load_env
   command -v tailscale >/dev/null || die "tailscale CLI not found"
@@ -265,6 +305,7 @@ llmctl — local LLM server
 
   model list                   show presets (* = active)
   model use <preset>           hot-swap the vLLM model
+  gpu pause | resume | status  free the GPU (gaming) / take it back; API stays up on CPU fallback
 
   key create <alias> [opts]    issue a virtual API key   ${c_dim}--models --rpm --tpm --parallel --budget --duration${c_off}
   key list | key revoke <alias>
@@ -281,7 +322,7 @@ EOF
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
-  init|doctor|up|down|ps|logs|restart|model|key|tunnel|admin|test|backup|restore) "cmd_$cmd" "$@" ;;
+  init|doctor|up|down|ps|logs|restart|model|gpu|key|tunnel|admin|test|backup|restore) "cmd_$cmd" "$@" ;;
   help|-h|--help) usage ;;
   *) usage; exit 1 ;;
 esac

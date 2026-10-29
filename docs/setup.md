@@ -41,7 +41,7 @@ cd local-llm-server
 ./llmctl init        # creates .env, generates every secret
 ```
 
-On Windows run every command as `bash llmctl …` from Git Bash.
+On Windows use PowerShell with `.\llmctl.ps1 …` (it finds Git Bash for you), or Git Bash with `bash llmctl …`. Plain `bash` in PowerShell is WSL's launcher and won't work.
 
 ## 3. Configure `.env`
 

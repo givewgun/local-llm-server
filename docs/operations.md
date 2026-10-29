@@ -1,6 +1,20 @@
 # Operations runbook
 
-Everything goes through `./llmctl` (Windows: `bash llmctl`). Run `./llmctl help` for the list.
+Everything goes through `./llmctl` (Windows PowerShell: `.\llmctl.ps1`; Git Bash: `bash llmctl`). Run `./llmctl help` for the list.
+
+## Freeing the GPU (gaming)
+
+```bash
+./llmctl gpu pause     # stop vLLM, evict Ollama GPU models: ~10 GB VRAM freed
+./llmctl gpu status    # vLLM state + VRAM used
+./llmctl gpu resume    # close the game first, then take the GPU back (~1-2 min)
+```
+
+While paused, the API stays online: `local-chat` is answered by the CPU fallback (`x-litellm-attempted-fallbacks: 1`).
+A stopped vLLM stays stopped across reboots until you resume.
+
+Don't use Docker Desktop's **Pause** button for this: it freezes every container (taking the public API down) and frees
+no VRAM. `llmctl up` and `llmctl gpu` unpause anything they find paused.
 
 ## Daily
 
