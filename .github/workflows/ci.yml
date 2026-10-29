@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compose config renders for every profile
+        run: |
+          cp .env.example .env
+          sed -i 's/=CHANGE_ME$/=ci-placeholder/' .env
+          for p in "" vllm ollama tunnel monitoring webui "vllm,tunnel,monitoring,webui"; do
+            echo "profiles: '${p:-<none>}'"
+            COMPOSE_PROFILES="$p" docker compose config -q
+          done
+
+      - name: YAML lint
+        run: |
+          pip install --quiet yamllint
+          yamllint -d '{extends: relaxed, rules: {line-length: {max: 140}}}' \
+            compose.yaml config/ models/ .github/
+
+      - name: Shellcheck
+        run: shellcheck llmctl
+
+      - name: Python syntax
+        run: python3 -m py_compile scripts/admin.py
+
+      - name: Grafana dashboards are valid JSON
+        run: for f in config/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null; done
+
+      - name: Model presets declare a model
+        run: |
+          for f in models/*.yaml; do
+            grep -q '^model: ' "$f" || { echo "$f has no model:"; exit 1; }
+          done

@@ -1,0 +1,7 @@
+# Qwen2.5 7B Instruct, 4-bit AWQ (~5.6 GB weights). No reasoning mode.
+model: Qwen/Qwen2.5-7B-Instruct-AWQ
+max-model-len: 16384
+max-num-seqs: 16
+enable-prefix-caching: true
+enable-auto-tool-choice: true
+tool-call-parser: hermes

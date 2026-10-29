@@ -1,0 +1,219 @@
+# Local LLM Server — production stack
+#
+# Which services run is controlled by COMPOSE_PROFILES in .env:
+#   vllm        GPU inference engine (OpenAI-compatible), primary model
+#   ollama      Containerised Ollama (use on machines without a native install)
+#   tunnel      Cloudflare Tunnel — public HTTPS ingress, no open ports
+#   monitoring  Prometheus + Grafana
+#   webui       Open WebUI chat front-end
+#
+# The gateway (LiteLLM + Postgres) has no profile and always runs.
+# See docs/architecture.md for the full picture.
+
+name: llm
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  # ---------------------------------------------------------------- inference
+  vllm:
+    <<: *gpu
+    image: vllm/vllm-openai:${VLLM_IMAGE_TAG:-v0.32.0}
+    profiles: ["vllm"]
+    restart: unless-stopped
+    ipc: host
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      VLLM_API_KEY: ${VLLM_API_KEY:?run ./llmctl init}
+      MODEL_PRESET: ${MODEL_PRESET:-qwen3-8b-awq}
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+      - ./models:/presets:ro
+    # Model-specific flags live in models/<preset>.yaml; machine-specific ones below.
+    # `vllm serve --config` ignores the file's `model:` key, so pass it positionally.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        preset="/presets/$${MODEL_PRESET}.yaml"
+        model="$$(sed -n 's/^model: *//p' "$$preset")"
+        [ -n "$$model" ] || { echo "no 'model:' in $$preset" >&2; exit 1; }
+        exec vllm serve "$$model" --config "$$preset" "$$@"
+      - vllm
+    command:
+      # Fixed internal name: LiteLLM maps the public "local-chat" alias onto it.
+      - --served-model-name=primary
+      - --gpu-memory-utilization=${VLLM_GPU_MEMORY_UTILIZATION:-0.70}
+      - --host=0.0.0.0
+      - --port=8000
+    ports:
+      # Loopback by default. Bind to the Tailscale IP to serve a remote gateway.
+      - "${VLLM_BIND_ADDR:-127.0.0.1}:${VLLM_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      # First boot downloads the model; give it time.
+      start_period: 15m
+    logging: *logging
+
+  ollama:
+    <<: *gpu
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.40.12}
+    profiles: ["ollama"]
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *logging
+
+  # ------------------------------------------------------------------ gateway
+  litellm:
+    image: ghcr.io/berriai/litellm:${LITELLM_IMAGE_TAG:-v1.106.6}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?run ./llmctl init}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?run ./llmctl init}
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      STORE_MODEL_IN_DB: "False"
+      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:?run ./llmctl init}
+      VLLM_API_BASE: ${VLLM_API_BASE:-http://vllm:8000/v1}
+      VLLM_API_KEY: ${VLLM_API_KEY}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Admin plane: loopback only. Reach it remotely via `./llmctl admin expose` (Tailscale).
+      - "127.0.0.1:${LITELLM_HOST_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging: *logging
+
+  postgres:
+    image: postgres:${POSTGRES_IMAGE_TAG:-17.11-alpine3.23}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./llmctl init}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *logging
+
+  # ------------------------------------------------------------------- ingress
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_IMAGE_TAG:-2026.10.5}
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --config /etc/cloudflared/config.yml run
+    volumes:
+      # config.yml + <tunnel-id>.json are generated by `./llmctl tunnel setup` and git-ignored.
+      - ./config/cloudflared:/etc/cloudflared:ro
+    logging: *logging
+
+  # ---------------------------------------------------------------- observing
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_IMAGE_TAG:-v3.15.1}
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_IMAGE_TAG:-13.2.5}
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run ./llmctl init}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3000}:3000"
+    logging: *logging
+
+  # ----------------------------------------------------------------- frontend
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:${OPEN_WEBUI_IMAGE_TAG:-v0.12.4}
+    profiles: ["webui"]
+    restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
+    environment:
+      WEBUI_URL: https://${CHAT_HOSTNAME:-chat.localhost}
+      WEBUI_SECRET_KEY: ${OPEN_WEBUI_SECRET_KEY:?run ./llmctl init}
+      ENABLE_OLLAMA_API: "false"
+      OPENAI_API_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${OPEN_WEBUI_LITELLM_KEY:-}
+      # First account becomes admin; everyone after waits for approval.
+      ENABLE_SIGNUP: "true"
+      DEFAULT_USER_ROLE: pending
+    volumes:
+      - open-webui-data:/app/backend/data
+    ports:
+      - "127.0.0.1:${OPEN_WEBUI_HOST_PORT:-8080}:8080"
+    logging: *logging
+
+volumes:
+  hf-cache:
+  ollama-data:
+  pg-data:
+  prometheus-data:
+  grafana-data:
+  open-webui-data:

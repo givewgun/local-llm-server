@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# llmctl — operate the local LLM server. Needs only bash + Docker.
+# On Windows run from Git Bash:  bash llmctl <command>
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+# Stop Git Bash from rewriting /container/paths into C:/Program Files/Git/...
+export MSYS_NO_PATHCONV=1
+
+c_red=$'\e[31m'; c_grn=$'\e[32m'; c_ylw=$'\e[33m'; c_dim=$'\e[2m'; c_off=$'\e[0m'
+info() { echo "${c_grn}==>${c_off} $*"; }
+warn() { echo "${c_ylw}warn:${c_off} $*" >&2; }
+die()  { echo "${c_red}error:${c_off} $*" >&2; exit 1; }
+
+dc() { docker compose "$@"; }
+
+load_env() {
+  [[ -f .env ]] || die ".env missing — run: ./llmctl init"
+  set -a; # shellcheck disable=SC1091
+  source .env; set +a
+}
+
+set_env() { # set_env KEY VALUE — update or append in .env
+  if grep -q "^$1=" .env; then
+    sed -i.bak "s|^$1=.*|$1=$2|" .env && rm -f .env.bak
+  else
+    echo "$1=$2" >> .env
+  fi
+}
+
+rand() { head -c "${1:-24}" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+
+has_profile() { [[ ",${COMPOSE_PROFILES:-}," == *",$1,"* ]]; }
+
+# Run scripts/admin.py inside the gateway container (no host Python needed).
+admin() { dc exec -T litellm python3 - "$@" < scripts/admin.py; }
+
+cloudflared_cli() {
+  docker run --rm -i -v "$ROOT/config/cloudflared:/home/nonroot/.cloudflared" \
+    -e TUNNEL_ORIGIN_CERT=/home/nonroot/.cloudflared/cert.pem \
+    "cloudflare/cloudflared:${CLOUDFLARED_IMAGE_TAG:-2026.10.5}" "$@"
+}
+
+# ------------------------------------------------------------------ commands
+
+cmd_init() {
+  if [[ -f .env ]]; then
+    info ".env exists — filling any remaining CHANGE_ME values only"
+  else
+    cp .env.example .env
+  fi
+  local k
+  while read -r k; do
+    case "$k" in
+      LITELLM_MASTER_KEY|LITELLM_SALT_KEY|VLLM_API_KEY) set_env "$k" "sk-$(rand 24)" ;;
+      *) set_env "$k" "$(rand 18)" ;;
+    esac
+    echo "  generated $k"
+  done < <(grep -E '^[A-Z_]+=CHANGE_ME$' .env | cut -d= -f1)
+  chmod 600 .env 2>/dev/null || true
+  info "edit .env: API_HOSTNAME, CHAT_HOSTNAME, TUNNEL_NAME, COMPOSE_PROFILES"
+}
+
+cmd_doctor() {
+  local ok=1
+  if command -v docker >/dev/null; then
+    echo "  [ok] docker $(docker version --format '{{.Server.Version}}')"
+  else
+    echo "  [!!] docker not found"; ok=0
+  fi
+  if docker compose version >/dev/null 2>&1; then
+    echo "  [ok] $(docker compose version)"
+  else
+    echo "  [!!] docker compose v2 missing"; ok=0
+  fi
+  if docker run --rm --gpus all "nvidia/cuda:12.8.0-base-ubuntu24.04" \
+       nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null \
+       | sed 's/^/  [ok] gpu: /'; then :; else
+    echo "  [!!] GPU not visible to Docker (install NVIDIA Container Toolkit / Docker Desktop WSL2 GPU)"; ok=0
+  fi
+  if [[ -f .env ]]; then echo "  [ok] .env present"; else echo "  [!!] .env missing (./llmctl init)"; ok=0; fi
+  ls config/cloudflared/*.json >/dev/null 2>&1 && echo "  [ok] tunnel credentials present" \
+    || echo "  [--] no tunnel yet (./llmctl tunnel setup)"
+  command -v tailscale >/dev/null && echo "  [ok] tailscale $(tailscale ip -4 2>/dev/null | head -1)" \
+    || echo "  [--] tailscale not installed (needed only for remote admin / multi-node)"
+  ((ok)) || die "fix the [!!] items above"
+}
+
+cmd_up() {
+  load_env
+  if has_profile tunnel && [[ ! -f config/cloudflared/config.yml ]]; then
+    die "tunnel profile enabled but not configured — run: ./llmctl tunnel setup"
+  fi
+  # Gateway first: the helpers below run inside it.
+  dc up -d postgres litellm
+  admin wait 300
+  admin ollama-prepare
+  # vLLM sizes its KV cache from free VRAM at startup — make room first.
+  has_profile vllm && admin ollama-unload
+  dc up -d --remove-orphans "$@"
+  if has_profile vllm; then
+    info "waiting for vLLM (first boot downloads the model; can take a while)"
+    wait_healthy vllm 1800
+  fi
+  admin wait 300
+}
+
+wait_healthy() { # wait_healthy <service> <timeout-seconds>
+  local deadline=$((SECONDS + $2)) state
+  while ((SECONDS < deadline)); do
+    state="$(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q "$1")" 2>/dev/null || true)"
+    [[ "$state" == healthy ]] && { info "$1 healthy"; return; }
+    sleep 10
+  done
+  die "$1 not healthy after $2 s — ./llmctl logs $1"
+}
+
+cmd_down()    { dc down "$@"; }
+cmd_ps()      { dc ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'; }
+cmd_logs()    { dc logs -f --tail=200 "$@"; }
+cmd_restart() { dc restart "$@"; }
+
+cmd_model() {
+  load_env
+  case "${1:-list}" in
+    list)
+      local f name
+      for f in models/*.yaml; do
+        name="$(basename "$f" .yaml)"
+        [[ "$name" == "$MODEL_PRESET" ]] && printf '* ' || printf '  '
+        printf '%-28s %s\n' "$name" "$(grep -m1 '^model:' "$f" | cut -d' ' -f2)"
+      done ;;
+    use)
+      local preset="${2:?usage: model use <preset>}"
+      [[ -f "models/$preset.yaml" ]] || die "no such preset: models/$preset.yaml"
+      set_env MODEL_PRESET "$preset"
+      info "switching vLLM to $preset (local-chat falls back to Ollama on CPU meanwhile)"
+      admin ollama-unload
+      MODEL_PRESET="$preset" dc up -d --force-recreate vllm
+      wait_healthy vllm 1800 ;;
+    *) die "usage: model [list|use <preset>]" ;;
+  esac
+}
+
+cmd_key() {
+  load_env
+  case "${1:-}" in
+    create) shift; admin key-create "$@" ;;
+    list)   admin key-list ;;
+    revoke) shift; admin key-revoke "$@" ;;
+    *) die "usage: key create <alias> [--models m1,m2] [--rpm N] [--tpm N] [--parallel N] [--budget USD] [--duration 30d]
+       key list
+       key revoke <alias>" ;;
+  esac
+}
+
+cmd_tunnel() {
+  load_env
+  case "${1:-}" in
+    setup)
+      local cfg=config/cloudflared
+      if [[ ! -f $cfg/cert.pem ]]; then
+        info "authorise cloudflared: open the URL below and pick the zone for $API_HOSTNAME"
+        cloudflared_cli tunnel login
+      fi
+      local id
+      id="$(cloudflared_cli tunnel list --output json --name "$TUNNEL_NAME" \
+            | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+      if [[ -z "$id" ]]; then
+        info "creating tunnel $TUNNEL_NAME"
+        cloudflared_cli tunnel create "$TUNNEL_NAME"
+        id="$(cloudflared_cli tunnel list --output json --name "$TUNNEL_NAME" \
+              | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)"
+      fi
+      [[ -f $cfg/$id.json ]] || die "credentials $cfg/$id.json missing — tunnel was created elsewhere. \
+Copy the file here or delete the tunnel: cloudflared tunnel delete $TUNNEL_NAME"
+      info "tunnel $TUNNEL_NAME = $id"
+
+      local webui="#WEBUI"
+      has_profile webui && webui=""
+      sed -e "s|\${TUNNEL_ID}|$id|g" -e "s|\${API_HOSTNAME}|$API_HOSTNAME|g" \
+          -e "s|\${CHAT_HOSTNAME}|$CHAT_HOSTNAME|g" -e "s|^#WEBUI|$webui|" \
+          $cfg/config.yml.tmpl > $cfg/config.yml
+      info "rendered $cfg/config.yml"
+
+      cloudflared_cli tunnel route dns "$TUNNEL_NAME" "$API_HOSTNAME"
+      has_profile webui && cloudflared_cli tunnel route dns "$TUNNEL_NAME" "$CHAT_HOSTNAME"
+      info "DNS routed. Start/refresh with: ./llmctl up" ;;
+    status)
+      cloudflared_cli tunnel info "$TUNNEL_NAME" ;;
+    *) die "usage: tunnel [setup|status]" ;;
+  esac
+}
+
+cmd_admin() {
+  load_env
+  command -v tailscale >/dev/null || die "tailscale CLI not found"
+  case "${1:-}" in
+    expose)
+      # Tailnet-only HTTPS. Never reachable from the public internet.
+      tailscale serve --bg --https=443 "http://127.0.0.1:${LITELLM_HOST_PORT:-4000}"
+      has_profile monitoring && tailscale serve --bg --https=8443 "http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}"
+      tailscale serve status ;;
+    unexpose) tailscale serve reset ;;
+    *) die "usage: admin [expose|unexpose]" ;;
+  esac
+}
+
+cmd_test() {
+  load_env
+  if [[ "${1:-}" == "public" ]]; then
+    local key="${2:-}"
+    [[ -n "$key" ]] || die "usage: test public <virtual-key>"
+    admin smoke "https://$API_HOSTNAME" "$key"
+  else
+    admin smoke
+  fi
+}
+
+cmd_backup() {
+  load_env
+  mkdir -p backups
+  local out
+  out="backups/litellm-$(date +%Y%m%d-%H%M%S).sql.gz"
+  dc exec -T postgres pg_dump -U litellm -d litellm | gzip > "$out"
+  info "wrote $out ($(du -h "$out" | cut -f1))"
+}
+
+cmd_restore() {
+  load_env
+  local file="${1:?usage: restore <backups/file.sql.gz>}"
+  [[ -f "$file" ]] || die "no such file: $file"
+  warn "this replaces the gateway database (keys, spend logs) with $file"
+  read -r -p "type 'restore' to continue: " ans
+  [[ "$ans" == restore ]] || die "aborted"
+  dc stop litellm
+  dc exec -T postgres psql -U litellm -d postgres -c "DROP DATABASE litellm WITH (FORCE);" -c "CREATE DATABASE litellm OWNER litellm;"
+  gunzip -c "$file" | dc exec -T postgres psql -q -U litellm -d litellm
+  dc start litellm
+  info "restored"
+}
+
+usage() {
+  cat <<EOF
+llmctl — local LLM server
+
+  init                         create .env with generated secrets
+  doctor                       check Docker, GPU, config
+  up [svc...]                  start stack (per COMPOSE_PROFILES) and wait until ready
+  down | ps | logs [svc] | restart [svc]
+
+  model list                   show presets (* = active)
+  model use <preset>           hot-swap the vLLM model
+
+  key create <alias> [opts]    issue a virtual API key   ${c_dim}--models --rpm --tpm --parallel --budget --duration${c_off}
+  key list | key revoke <alias>
+
+  tunnel setup                 login, create tunnel, render config, route DNS
+  tunnel status
+  admin expose | unexpose      publish admin UI + Grafana on the tailnet (tailscale serve)
+
+  test                         smoke test against the local gateway
+  test public <key>            smoke test through Cloudflare with a virtual key
+  backup | restore <file>      gateway database dump / restore
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  init|doctor|up|down|ps|logs|restart|model|key|tunnel|admin|test|backup|restore) "cmd_$cmd" "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

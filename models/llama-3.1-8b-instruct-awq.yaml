@@ -1,0 +1,7 @@
+# Llama 3.1 8B Instruct, 4-bit AWQ (~5.7 GB weights).
+model: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4
+max-model-len: 16384
+max-num-seqs: 16
+enable-prefix-caching: true
+enable-auto-tool-choice: true
+tool-call-parser: llama3_json

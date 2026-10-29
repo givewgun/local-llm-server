@@ -1,0 +1,19 @@
+# Rendered to config.yml by `./llmctl tunnel setup`. Edit this template, not config.yml.
+tunnel: ${TUNNEL_ID}
+credentials-file: /etc/cloudflared/${TUNNEL_ID}.json
+
+originRequest:
+  connectTimeout: 10s
+  keepAliveTimeout: 90s
+
+ingress:
+  # Public API surface: OpenAI-compatible routes + liveness only.
+  # Admin routes (/ui, /key/*, /user/*, /spend/*, ...) never leave the tailnet.
+  - hostname: ${API_HOSTNAME}
+    path: ^/(v1/.*|health/liveliness)$
+    service: http://litellm:4000
+  - hostname: ${API_HOSTNAME}
+    service: http_status:404
+#WEBUI  - hostname: ${CHAT_HOSTNAME}
+#WEBUI    service: http://open-webui:8080
+  - service: http_status:404

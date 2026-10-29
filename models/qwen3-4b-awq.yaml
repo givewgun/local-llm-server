@@ -1,0 +1,10 @@
+# Qwen3 4B Instruct, 4-bit AWQ (~2.6 GB weights). For 8 GB GPUs or when the
+# GPU is shared with other workloads.
+model: Qwen/Qwen3-4B-AWQ
+max-model-len: 16384
+max-num-seqs: 16
+enable-prefix-caching: true
+reasoning-parser: qwen3
+enable-auto-tool-choice: true
+tool-call-parser: hermes
+default-chat-template-kwargs: {"enable_thinking": false}

@@ -1,0 +1,10 @@
+# secrets
+.env
+config/cloudflared/*.json
+config/cloudflared/*.pem
+config/cloudflared/config.yml
+
+# runtime
+backups/
+*.log
+__pycache__/
