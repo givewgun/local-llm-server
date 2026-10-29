@@ -1,5 +1,7 @@
 # Architecture
 
+> New to LLM serving? Read [how-it-works.md](how-it-works.md) first.
+
 A self-hosted, OpenAI-compatible LLM API that runs on a consumer GPU box and is
 reachable from anywhere on the internet — without opening a single inbound port.
 

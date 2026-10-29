@@ -86,6 +86,10 @@ docs/                        architecture, setup, operations, security, scaling,
 
 ## Documentation
 
+New to hosting LLMs? Start with **[How it works](docs/how-it-works.md)**: the concepts (VRAM, KV cache, batching),
+every component mapped to its web-stack equivalent, and the life of a request.
+
+- [How it works](docs/how-it-works.md): primer for engineers new to LLM serving
 - [Architecture](docs/architecture.md): components, request flow, trust zones, diagrams
 - [Setup](docs/setup.md): fresh machine to public API
 - [Operations](docs/operations.md): models, keys, upgrades, backups, troubleshooting
