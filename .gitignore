@@ -8,3 +8,4 @@ config/cloudflared/config.yml
 backups/
 *.log
 __pycache__/
+.keys/

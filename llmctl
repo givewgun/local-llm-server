@@ -160,8 +160,12 @@ cmd_tunnel() {
   case "${1:-}" in
     setup)
       local cfg=config/cloudflared
+      if [[ ! -f $cfg/cert.pem && -f "$HOME/.cloudflared/cert.pem" ]]; then
+        info "reusing $HOME/.cloudflared/cert.pem"
+        cp "$HOME/.cloudflared/cert.pem" $cfg/cert.pem
+      fi
       if [[ ! -f $cfg/cert.pem ]]; then
-        info "authorise cloudflared: open the URL below and pick the zone for $API_HOSTNAME"
+        info "authorise cloudflared: open the URL below within ~5 min and pick the zone for $API_HOSTNAME"
         cloudflared_cli tunnel login
       fi
       local id
@@ -185,7 +189,11 @@ Copy the file here or delete the tunnel: cloudflared tunnel delete $TUNNEL_NAME"
       info "rendered $cfg/config.yml"
 
       cloudflared_cli tunnel route dns "$TUNNEL_NAME" "$API_HOSTNAME"
-      has_profile webui && cloudflared_cli tunnel route dns "$TUNNEL_NAME" "$CHAT_HOSTNAME"
+      if has_profile webui; then cloudflared_cli tunnel route dns "$TUNNEL_NAME" "$CHAT_HOSTNAME"; fi
+      if ! has_profile tunnel; then
+        set_env COMPOSE_PROFILES "${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}tunnel"
+        info "added 'tunnel' to COMPOSE_PROFILES"
+      fi
       info "DNS routed. Start/refresh with: ./llmctl up" ;;
     status)
       cloudflared_cli tunnel info "$TUNNEL_NAME" ;;
@@ -202,7 +210,10 @@ cmd_admin() {
       tailscale serve --bg --https=443 "http://127.0.0.1:${LITELLM_HOST_PORT:-4000}"
       has_profile monitoring && tailscale serve --bg --https=8443 "http://127.0.0.1:${GRAFANA_HOST_PORT:-3000}"
       tailscale serve status ;;
-    unexpose) tailscale serve reset ;;
+    unexpose)
+      # Remove only our two handlers; leave any other serve config alone.
+      tailscale serve --https=443 off || true
+      tailscale serve --https=8443 off || true ;;
     *) die "usage: admin [expose|unexpose]" ;;
   esac
 }

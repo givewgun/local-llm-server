@@ -48,7 +48,7 @@ On Windows run every command as `bash llmctl …` from Git Bash.
 The handful of values you actually edit:
 
 ```ini
-COMPOSE_PROFILES=vllm,tunnel,monitoring   # add ,webui for a chat UI; ,ollama on Linux
+COMPOSE_PROFILES=vllm,monitoring          # `tunnel setup` adds ,tunnel; add ,webui for a chat UI; ,ollama on Linux
 MODEL_PRESET=qwen3-8b-awq
 VLLM_GPU_MEMORY_UTILIZATION=0.70
 API_HOSTNAME=llm.yourdomain.com
@@ -67,7 +67,7 @@ starting would shrink vLLM's KV cache or stop it from starting at all.
 Start without the tunnel first so problems stay local:
 
 ```bash
-COMPOSE_PROFILES=vllm,monitoring ./llmctl up
+./llmctl up
 ./llmctl test
 ```
 
@@ -122,6 +122,10 @@ Never hand out the master key. One virtual key per consumer:
 ```bash
 ./llmctl admin expose
 ```
+
+First time only: if it prints *"Serve is not enabled on your tailnet"* with a
+`login.tailscale.com/f/serve?...` link, open it, enable HTTPS/Serve for the tailnet, and
+the command continues by itself.
 
 Now from any device on your tailnet:
 
