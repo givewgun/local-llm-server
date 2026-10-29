@@ -43,6 +43,10 @@ litellm_settings:
   turn_off_message_logging: true
   # Expand the ollama/* wildcard in /v1/models to what Ollama actually has pulled.
   check_provider_endpoint: true
+  # Per-key / per-model request, token and failure metrics on /metrics.
+  # Unauthenticated is fine: :4000 is loopback/tailnet only and the tunnel never routes /metrics.
+  callbacks: ["prometheus"]
+  require_auth_for_metrics_endpoint: false
 
 router_settings:
   routing_strategy: simple-shuffle

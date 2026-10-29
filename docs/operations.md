@@ -9,7 +9,7 @@ Everything goes through `./llmctl` (Windows: `bash llmctl`). Run `./llmctl help`
 | Status | `./llmctl ps` |
 | Logs | `./llmctl logs [vllm\|litellm\|cloudflared…]` |
 | Health check | `./llmctl test` / `./llmctl test public <key>` |
-| Dashboard | Grafana → *LLM Server* (via `./llmctl admin expose`, or `http://127.0.0.1:3000` locally) |
+| Dashboards | Grafana → *LLM Server* folder (via `./llmctl admin expose`, or `http://127.0.0.1:3000` locally): *LLM Engine (vLLM)*, *LLM Gateway (LiteLLM)* (filter by API key), *GPU* |
 
 ## Switching models
 
@@ -97,7 +97,8 @@ startup.
 | `.env` | `./llmctl up` (recreates changed services) |
 | `config/litellm/config.yaml` | `./llmctl restart litellm` |
 | `config/cloudflared/config.yml.tmpl`, hostnames | `./llmctl tunnel setup && ./llmctl restart cloudflared` |
-| Prometheus / Grafana files | `./llmctl restart prometheus grafana` |
+| Prometheus / Grafana files | `./llmctl restart prometheus grafana` (Grafana does not notice file changes on its own) |
+| Dashboards | Edit `scripts/gen_dashboards.py`, run `python3 scripts/gen_dashboards.py config/grafana/dashboards`, then `./llmctl restart grafana` |
 | `config/api-docs/openapi.yaml` | `./llmctl restart api-docs` |
 | Profiles `docs` / `webui` toggled | `./llmctl tunnel setup && ./llmctl up && ./llmctl restart cloudflared` (re-renders ingress) |
 

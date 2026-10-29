@@ -168,6 +168,14 @@ services:
       - "127.0.0.1:9090:9090"
     logging: *logging
 
+  # GPU utilisation / VRAM / temperature / power via nvidia-smi (works under WSL 2 too).
+  gpu-exporter:
+    <<: *gpu
+    image: utkuozdemir/nvidia_gpu_exporter:${GPU_EXPORTER_IMAGE_TAG:-1.16.0}
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    logging: *logging
+
   grafana:
     image: grafana/grafana:${GRAFANA_IMAGE_TAG:-13.2.5}
     profiles: ["monitoring"]

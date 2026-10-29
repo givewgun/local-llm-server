@@ -10,6 +10,7 @@
 | Admin functions (key minting, UI) | Takeover via public endpoint | Admin routes are **not routed** publicly (cloudflared path allowlist → 404); admin UI only via Tailscale; master key never leaves the host |
 | Prompts / completions | Leakage via logs | `turn_off_message_logging: true` — spend logs keep metadata only. TLS from client to Cloudflare edge; tunnel is encrypted to the edge |
 | Secrets | Leakage via git | `.env`, `cert.pem`, tunnel credentials are git-ignored; `llmctl init` generates unique random values per machine |
+| Metrics | Leaking usage data | LiteLLM `/metrics` is unauthenticated (key aliases, token counts; no prompts) but only on loopback/tailnet; the tunnel never routes it (public `/metrics` → 404) |
 | Backends | Lateral movement inside Docker | vLLM requires its own API key; Postgres has no published port |
 | Supply chain | Malicious/changed images | Every image tag pinned; upgrades are explicit diffs |
 

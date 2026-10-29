@@ -15,7 +15,7 @@ reachable from anywhere on the internet — without opening a single inbound por
 | **Model swaps without client changes** | Stable public aliases (`local-chat`) decoupled from the loaded model |
 | **Zero inbound exposure** | Cloudflare Tunnel (outbound-only); admin plane only on Tailscale |
 | **Resilient** | Healthchecks, restart policies, automatic fallback vLLM → Ollama |
-| **Observable** | Prometheus + Grafana: tokens/s, TTFT, queue depth, KV cache, tunnel health |
+| **Observable** | Prometheus + Grafana: engine, gateway (per-key usage) and GPU dashboards |
 | **Reproducible** | Everything is `compose.yaml` + pinned image tags + `.env`; one CLI (`llmctl`) |
 
 ## System context
@@ -68,7 +68,8 @@ flowchart LR
 | **LiteLLM** | API gateway: auth (virtual keys), rate limits, budgets, routing, fallbacks, retries, spend logging, admin UI. | Docker network; host loopback `:4000` |
 | **Postgres** | LiteLLM state: keys, users, teams, spend logs. | Docker network only |
 | **cloudflared** | Outbound tunnel to Cloudflare. Path-allowlists the public surface. | Nothing — outbound only |
-| **Prometheus / Grafana** | Metrics + the `LLM Server` dashboard. | Host loopback `:9090` / `:3000` |
+| **Prometheus / Grafana** | Scrapes vLLM, LiteLLM, cloudflared and the GPU exporter; three dashboards: *LLM Engine (vLLM)*, *LLM Gateway (LiteLLM)*, *GPU*. | Host loopback `:9090` / `:3000` |
+| **gpu-exporter** | `nvidia-smi` → Prometheus: GPU utilisation, VRAM, temperature, power, clocks. Works under WSL 2. | Docker network only |
 | **API docs** *(optional, `docs` profile)* | Swagger UI over a hand-curated OpenAPI spec (`config/api-docs/openapi.yaml`) covering only the public routes. Same origin as the API, so *Try it out* works. | `<api-host>/docs` via the tunnel; no host port |
 | **Open WebUI** *(optional)* | ChatGPT-style UI for non-developers, uses a LiteLLM virtual key. | Host loopback `:8080`; `chat.<domain>` when enabled |
 

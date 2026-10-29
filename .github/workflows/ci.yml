@@ -35,8 +35,11 @@ jobs:
       - name: Python syntax
         run: python3 -m py_compile scripts/admin.py
 
-      - name: Grafana dashboards are valid JSON
-        run: for f in config/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null; done
+      - name: Grafana dashboards match their generator
+        run: |
+          mkdir -p /tmp/dash
+          python3 scripts/gen_dashboards.py /tmp/dash
+          diff -r /tmp/dash config/grafana/dashboards
 
       - name: OpenAPI spec is valid
         run: |

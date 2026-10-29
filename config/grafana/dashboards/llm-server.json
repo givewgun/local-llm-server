@@ -1,9 +1,9 @@
 {
   "uid": "llm-server",
-  "title": "LLM Server",
+  "title": "LLM Engine (vLLM)",
+  "description": "GPU inference engine: throughput, latency, queue, KV cache, tunnel.",
   "tags": [
-    "llm",
-    "vllm"
+    "llm"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -29,7 +29,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "vLLM up",
+      "title": "vLLM",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -79,13 +80,15 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Tunnel up",
+      "title": "Tunnel",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -135,13 +138,15 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
       "id": 4,
       "type": "stat",
       "title": "Running requests",
+      "description": "Requests currently decoding on the GPU.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -176,13 +181,15 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
       "id": 5,
       "type": "stat",
       "title": "Waiting requests",
+      "description": "Requests queued because the batch or KV cache is full. Sustained > 0 means the GPU is saturated.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -234,13 +241,15 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
       "id": 6,
       "type": "stat",
       "title": "KV cache used",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -253,7 +262,24 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit"
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -275,13 +301,15 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
       "id": 7,
       "type": "stat",
       "title": "Generation tok/s",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -316,7 +344,8 @@
           ]
         },
         "colorMode": "value",
-        "graphMode": "area"
+        "graphMode": "area",
+        "textMode": "value"
       }
     },
     {
@@ -335,6 +364,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "Tokens / second",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -358,7 +388,7 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(vllm:prompt_tokens_total[$__rate_interval]))",
-          "legendFormat": "prompt",
+          "legendFormat": "prompt (prefill)",
           "refId": "A"
         },
         {
@@ -367,15 +397,26 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(vllm:generation_tokens_total[$__rate_interval]))",
-          "legendFormat": "generation",
+          "legendFormat": "generation (decode)",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 10,
       "type": "timeseries",
       "title": "Requests in flight",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -411,12 +452,23 @@
           "legendFormat": "waiting",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 11,
       "type": "timeseries",
       "title": "Finished requests / s by reason",
+      "description": "stop = model finished; length = hit max_tokens or context limit.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -443,12 +495,23 @@
           "legendFormat": "{{finished_reason}}",
           "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 12,
       "type": "timeseries",
       "title": "Cache",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -484,7 +547,17 @@
           "legendFormat": "prefix cache hit rate",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 13,
@@ -502,6 +575,7 @@
       "id": 14,
       "type": "timeseries",
       "title": "Time to first token",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -524,7 +598,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -533,16 +607,27 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 15,
       "type": "timeseries",
       "title": "Inter-token latency",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -565,7 +650,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -574,16 +659,27 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 16,
       "type": "timeseries",
       "title": "End-to-end request latency",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -606,7 +702,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
@@ -615,16 +711,27 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 17,
       "type": "timeseries",
       "title": "Queue time",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -647,16 +754,27 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket{}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 18,
       "type": "timeseries",
       "title": "Preemptions / s (KV cache pressure)",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -683,7 +801,17 @@
           "legendFormat": "preemptions",
           "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 19,
@@ -701,6 +829,7 @@
       "id": 20,
       "type": "timeseries",
       "title": "Tunnel requests / s",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -736,12 +865,23 @@
           "legendFormat": "errors",
           "refId": "B"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     },
     {
       "id": 21,
       "type": "timeseries",
       "title": "Tunnel HA connections",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -768,7 +908,17 @@
           "legendFormat": "connections",
           "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "templating": {
@@ -776,5 +926,17 @@
   },
   "annotations": {
     "list": []
-  }
+  },
+  "links": [
+    {
+      "type": "dashboards",
+      "tags": [
+        "llm"
+      ],
+      "asDropdown": false,
+      "title": "LLM dashboards",
+      "includeVars": false,
+      "keepTime": true
+    }
+  ]
 }

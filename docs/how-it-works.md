@@ -19,7 +19,7 @@ flowchart TB
         PG[("<b>Postgres</b><br/>keys, users, usage logs")]
         VLLM["<b>vLLM (GPU)</b><br/>Qwen3-8B AWQ, ~10 GB VRAM<br/>batches many requests"]
         OLL["<b>Ollama</b><br/>Llama 3.2 3B on CPU<br/>+ any ollama/* model"]
-        GRAF["<b>Grafana</b><br/>LLM Server dashboard"]
+        GRAF["<b>Grafana</b><br/>engine, gateway, GPU dashboards"]
         PROM["<b>Prometheus</b><br/>stores metrics for 30 days"]
     end
 
@@ -76,8 +76,8 @@ Nine containers, each with one job. The "web stack equivalent" column maps each 
 | **Postgres** | Database | Stores LiteLLM's API keys, users, teams and usage logs. The only data worth backing up. | Docker network only |
 | **cloudflared** | Reverse tunnel / ingress | Opens an outbound connection to Cloudflare. Requests to `llm.givewgun.com` come back down that connection. Only forwards `/v1/*`, `/health/liveliness` and `/docs`. | Nothing; it only connects out |
 | **Tailscale** | Private VPN | Not a container: installed on Windows. `tailscale serve` publishes the admin UI and Grafana to your own devices only. | Your tailnet devices |
-| **Prometheus** | Metrics database | Pulls metrics every 15 s from vLLM and cloudflared, keeps 30 days. | `127.0.0.1:9090` |
-| **Grafana** | Dashboards | Draws the "LLM Server" dashboard from Prometheus: tokens/s, latency, queue, KV cache, tunnel health. | `127.0.0.1:3000` + tailnet `:8443` |
+| **Prometheus** | Metrics database | Pulls metrics every 15 s from vLLM, LiteLLM, cloudflared and a GPU exporter; keeps 30 days. | `127.0.0.1:9090` |
+| **Grafana** | Dashboards | Three dashboards from Prometheus: *LLM Engine* (tokens/s, latency, queue, KV cache, tunnel), *LLM Gateway* (requests, tokens and errors per API key), *GPU* (utilisation, VRAM, temperature, power). | `127.0.0.1:3000` + tailnet `:8443` |
 | **api-docs** | Swagger / API reference | Swagger UI over a hand-written spec of the public routes, at `llm.givewgun.com/docs`. | Public, via the tunnel |
 
 ### Why both vLLM and LiteLLM
@@ -230,7 +230,7 @@ Start from the HTTP status the client sees; it tells you which hop failed.
 | 524 after about 100 s | Long non-streamed answer | Client should use `"stream": true` |
 | Slow answers, `x-litellm-attempted-fallbacks: 1` | vLLM down, CPU fallback answering | `bash llmctl logs vllm`; often VRAM taken by something else |
 
-For everything else, the Grafana dashboard shows whether the GPU is the bottleneck: requests waiting above zero for long, or a KV cache stuck near 100%, mean too much load for one GPU.
+For everything else, the Grafana dashboards answer it: *LLM Gateway* shows who is calling and what fails, *GPU* shows whether something else is using the card, and *LLM Engine* shows whether the GPU is the bottleneck: requests waiting above zero for long, or a KV cache stuck near 100%, mean too much load for one GPU.
 
 ### Keeping it up
 
