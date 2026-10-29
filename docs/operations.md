@@ -98,6 +98,8 @@ startup.
 | `config/litellm/config.yaml` | `./llmctl restart litellm` |
 | `config/cloudflared/config.yml.tmpl`, hostnames | `./llmctl tunnel setup && ./llmctl restart cloudflared` |
 | Prometheus / Grafana files | `./llmctl restart prometheus grafana` |
+| `config/api-docs/openapi.yaml` | `./llmctl restart api-docs` |
+| Profiles `docs` / `webui` toggled | `./llmctl tunnel setup && ./llmctl up && ./llmctl restart cloudflared` (re-renders ingress) |
 
 ## Upgrades
 
@@ -132,7 +134,7 @@ are the machine's identity. Losing the tunnel credentials just means re-running
 | `local-chat` slow, header `x-litellm-attempted-fallbacks: 1` | vLLM down → served by Ollama | `./llmctl logs vllm` |
 | vLLM: `Available KV cache memory: -x GiB` / `No available memory for the cache blocks` | VRAM held by other apps or Ollama when vLLM started | Close games, `ollama stop <model>` (llmctl does this for you on `up`/`model use`), or lower `VLLM_GPU_MEMORY_UTILIZATION` |
 | vLLM restarting, `unrecognized arguments` | Preset key not valid for this vLLM version | Fix the preset |
-| Public URL → **404** | Path not on the allowlist (only `/v1/*`, `/health/liveliness`) | Use `/v1/...` |
+| Public URL → **404** | Path not on the allowlist (only `/v1/*`, `/health/liveliness`, `/docs`) | Use `/v1/...` |
 | Public URL → **502** | cloudflared up but LiteLLM down | `./llmctl ps`, `./llmctl logs litellm` |
 | Public URL → **530 / 1033** | Tunnel not connected | `./llmctl logs cloudflared`, `./llmctl tunnel status` |
 | Public URL → **524** after ~100 s | Cloudflare's proxy timeout on non-streamed long generations | Use `"stream": true` |

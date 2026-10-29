@@ -48,7 +48,7 @@ On Windows run every command as `bash llmctl …` from Git Bash.
 The handful of values you actually edit:
 
 ```ini
-COMPOSE_PROFILES=vllm,monitoring          # `tunnel setup` adds ,tunnel; add ,webui for a chat UI; ,ollama on Linux
+COMPOSE_PROFILES=vllm,monitoring          # `tunnel setup` adds ,tunnel; add ,docs for public Swagger at /docs, ,webui for a chat UI, ,ollama on Linux
 MODEL_PRESET=qwen3-8b-awq
 VLLM_GPU_MEMORY_UTILIZATION=0.70
 API_HOSTNAME=llm.yourdomain.com

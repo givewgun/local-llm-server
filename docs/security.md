@@ -18,6 +18,7 @@
 - **Cloudflare terminates TLS.** Cloudflare can technically see traffic. Acceptable for a test/hobby API; for sensitive data use Tailscale-only access (Topology B without the tunnel) instead.
 - **Single host.** Power or ISP loss = outage (LiteLLM fallback doesn't help when the whole box is down). See [scaling.md](scaling.md) for a cloud fallback.
 - **Model output safety.** No content filter is applied. Add LiteLLM guardrails if exposing to untrusted end users.
+- **Public API docs** (`/docs`, `docs` profile) document only the routes that are already public, so they reveal nothing new. LiteLLM's own Swagger (737 routes including admin) stays on the tailnet. *Try it out* runs in the visitor's browser with their own key, and `PERSIST_AUTHORIZATION=false` means the key isn't kept after reload.
 - **Open WebUI** has its own accounts; signup is enabled with `pending` role so you approve each user. Disable signup entirely once your users exist (`ENABLE_SIGNUP=false`).
 
 ## Key handling

@@ -181,10 +181,12 @@ cmd_tunnel() {
 Copy the file here or delete the tunnel: cloudflared tunnel delete $TUNNEL_NAME"
       info "tunnel $TUNNEL_NAME = $id"
 
-      local webui="#WEBUI"
+      # Lines tagged #WEBUI / #DOCS are enabled only when that profile is on.
+      local webui="#WEBUI" docs="#DOCS"
       has_profile webui && webui=""
+      has_profile docs && docs=""
       sed -e "s|\${TUNNEL_ID}|$id|g" -e "s|\${API_HOSTNAME}|$API_HOSTNAME|g" \
-          -e "s|\${CHAT_HOSTNAME}|$CHAT_HOSTNAME|g" -e "s|^#WEBUI|$webui|" \
+          -e "s|\${CHAT_HOSTNAME}|$CHAT_HOSTNAME|g" -e "s|^#WEBUI|$webui|" -e "s|^#DOCS|$docs|" \
           $cfg/config.yml.tmpl > $cfg/config.yml
       info "rendered $cfg/config.yml"
 

@@ -8,6 +8,13 @@ api_key  = sk-...   (a virtual key from the operator)
 model    = local-chat
 ```
 
+## Interactive docs
+
+**https://llm.givewgun.com/docs**: Swagger UI. Click **Authorize**, paste your key
+(no `Bearer ` prefix), open an endpoint, edit the example body, and click **Execute**.
+Pick a ready-made example (simple, thinking, JSON, tools) from the *Examples* dropdown.
+Streaming responses don't render well there; use curl or an SDK for those.
+
 ## Models
 
 | `model` | What it is |
@@ -82,7 +89,7 @@ Use their OpenAI integrations with the base URL above, e.g.
 | HTTP | Meaning |
 |------|---------|
 | 401 | Missing/invalid key |
-| 404 | Wrong path — only `/v1/*` is public |
+| 404 | Wrong path — only `/v1/*` (and `/docs`) is public |
 | 429 | Your key's rate / token / concurrency limit — back off and retry |
 | 5xx / 524 | Server busy or restarting; retry with backoff, use streaming |
 

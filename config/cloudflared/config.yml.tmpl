@@ -12,6 +12,10 @@ ingress:
   - hostname: ${API_HOSTNAME}
     path: ^/(v1/.*|health/liveliness)$
     service: http://litellm:4000
+  # Curated API docs (docs profile) — documents only the routes above.
+#DOCS  - hostname: ${API_HOSTNAME}
+#DOCS    path: ^/docs(/.*)?$
+#DOCS    service: http://api-docs:8080
   - hostname: ${API_HOSTNAME}
     service: http_status:404
 #WEBUI  - hostname: ${CHAT_HOSTNAME}

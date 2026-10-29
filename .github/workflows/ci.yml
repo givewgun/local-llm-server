@@ -18,7 +18,7 @@ jobs:
         run: |
           cp .env.example .env
           sed -i 's/=CHANGE_ME$/=ci-placeholder/' .env
-          for p in "" vllm ollama tunnel monitoring webui "vllm,tunnel,monitoring,webui"; do
+          for p in "" vllm ollama tunnel monitoring webui docs "vllm,tunnel,monitoring,webui,docs"; do
             echo "profiles: '${p:-<none>}'"
             COMPOSE_PROFILES="$p" docker compose config -q
           done
@@ -37,6 +37,11 @@ jobs:
 
       - name: Grafana dashboards are valid JSON
         run: for f in config/grafana/dashboards/*.json; do python3 -m json.tool "$f" > /dev/null; done
+
+      - name: OpenAPI spec is valid
+        run: |
+          pip install --quiet openapi-spec-validator
+          openapi-spec-validator config/api-docs/openapi.yaml
 
       - name: Model presets declare a model
         run: |

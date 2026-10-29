@@ -45,6 +45,12 @@ client.chat.completions.create(model="local-chat", messages=[{"role": "user", "c
 
 More examples (streaming, tools, reasoning mode, TS, curl): **[docs/client-usage.md](docs/client-usage.md)**.
 
+## Interactive API docs
+
+Swagger UI at **https://llm.givewgun.com/docs** (`docs` profile). It documents only the public
+routes and has examples; click **Authorize** with your key, then **Try it out**.
+LiteLLM's full admin Swagger stays private on the tailnet.
+
 ## Switching models
 
 ```bash
@@ -72,6 +78,7 @@ llmctl                       operator CLI (bash)
 models/*.yaml                vLLM model presets
 config/litellm/config.yaml   public model aliases, fallbacks, key limits
 config/cloudflared/          tunnel ingress template (public path allowlist)
+config/api-docs/openapi.yaml curated public API spec served at /docs
 config/prometheus/, grafana/ scrape config + provisioned "LLM Server" dashboard
 scripts/admin.py             gateway admin/smoke-test helper (runs inside the container)
 docs/                        architecture, setup, operations, security, scaling, ADRs

@@ -67,6 +67,7 @@ flowchart LR
 | **Postgres** | LiteLLM state: keys, users, teams, spend logs. | Docker network only |
 | **cloudflared** | Outbound tunnel to Cloudflare. Path-allowlists the public surface. | Nothing — outbound only |
 | **Prometheus / Grafana** | Metrics + the `LLM Server` dashboard. | Host loopback `:9090` / `:3000` |
+| **API docs** *(optional, `docs` profile)* | Swagger UI over a hand-curated OpenAPI spec (`config/api-docs/openapi.yaml`) covering only the public routes. Same origin as the API, so *Try it out* works. | `<api-host>/docs` via the tunnel; no host port |
 | **Open WebUI** *(optional)* | ChatGPT-style UI for non-developers, uses a LiteLLM virtual key. | Host loopback `:8080`; `chat.<domain>` when enabled |
 
 ## Request flow
@@ -130,7 +131,7 @@ flowchart TB
 Rules enforced:
 
 1. **No inbound ports.** Router/NAT untouched. All public traffic arrives over the tunnel.
-2. **Path allowlist at the edge connector.** `cloudflared` forwards only `/v1/*` and `/health/liveliness`; `/ui`, `/key/*`, `/spend/*` etc. return 404 from the public hostname.
+2. **Path allowlist at the edge connector.** `cloudflared` forwards only `/v1/*`, `/health/liveliness` and (with the `docs` profile) the curated Swagger UI at `/docs`; `/ui`, `/key/*`, `/spend/*` etc. return 404 from the public hostname.
 3. **Everything else binds to `127.0.0.1`.** Admin UIs are reached through `tailscale serve` (tailnet-only HTTPS).
 4. **Defence in depth on backends.** vLLM requires its own API key even on the internal network.
 5. **Least-privilege keys.** Clients get LiteLLM virtual keys with model allowlists and limits; the master key never leaves the host.

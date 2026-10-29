@@ -210,6 +210,22 @@ services:
       - "127.0.0.1:${OPEN_WEBUI_HOST_PORT:-8080}:8080"
     logging: *logging
 
+  # Curated Swagger UI for the public /v1 surface, served at https://$API_HOSTNAME/docs.
+  # Same origin as the API, so "Try it out" needs no CORS.
+  api-docs:
+    image: swaggerapi/swagger-ui:${SWAGGER_UI_IMAGE_TAG:-v5.34.0}
+    profiles: ["docs"]
+    restart: unless-stopped
+    environment:
+      BASE_URL: /docs
+      SWAGGER_JSON: /spec/openapi.yaml
+      PERSIST_AUTHORIZATION: "false"
+      TRY_IT_OUT_ENABLED: "true"
+      DISPLAY_REQUEST_DURATION: "true"
+    volumes:
+      - ./config/api-docs/openapi.yaml:/spec/openapi.yaml:ro
+    logging: *logging
+
 volumes:
   hf-cache:
   ollama-data:

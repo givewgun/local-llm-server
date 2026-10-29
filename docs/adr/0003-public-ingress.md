@@ -21,7 +21,8 @@ The host is a home PC behind a consumer router (possibly CGNAT).
 
 Cloudflare Tunnel (`cloudflared` container), locally-managed: the ingress rules live in
 `config/cloudflared/config.yml.tmpl` in git, so the public surface is reviewed code.
-Only `^/(v1/.*|health/liveliness)$` is routed; everything else on the hostname is 404.
+Only `^/(v1/.*|health/liveliness)$` is routed to the gateway, plus `^/docs(/.*)?$` to a curated
+Swagger UI when the `docs` profile is on; everything else on the hostname is 404.
 
 ## Consequences
 
